@@ -193,7 +193,7 @@ function Postmark() {
 // Sections
 // ------------------------------------------------------------------
 function ImportantSection({ state, load }) {
-  if (state.loading) return <Spinner label="Reading your inbox…" />;
+  if (state.loading) return <Spinner label={state.label || "Reading your inbox…"} />;
   if (state.error) return <ErrorBox msg={state.error} onRetry={load} />;
   if (!state.data) return null;
   if (!state.data.length)
@@ -240,7 +240,7 @@ function DigestGroup({ title, items }) {
 }
 
 function DigestSection({ state, load }) {
-  if (state.loading) return <Spinner label="Building your digest…" />;
+  if (state.loading) return <Spinner label={state.label || "Building your digest…"} />;
   if (state.error) return <ErrorBox msg={state.error} onRetry={load} />;
   if (!state.data) return null;
   const d = state.data;
@@ -326,7 +326,7 @@ function SenderRow({ s, token, onAuthExpired }) {
 }
 
 function SubsSection({ state, load, token, onAuthExpired }) {
-  if (state.loading) return <Spinner label="Sorting subscriptions…" />;
+  if (state.loading) return <Spinner label={state.label || "Sorting subscriptions…"} />;
   if (state.error) return <ErrorBox msg={state.error} onRetry={load} />;
   if (!state.data) return null;
   if (!state.data.length)
@@ -343,14 +343,17 @@ function SubsSection({ state, load, token, onAuthExpired }) {
 // ------------------------------------------------------------------
 // Section data loaders
 // ------------------------------------------------------------------
-async function loadImportantData(token) {
+async function loadImportantData(token, onStage) {
+  onStage("Fetching inbox…");
   const ids = await listMessageIds(
     token,
     "in:inbox -category:promotions -category:social",
     30
   );
   if (!ids.length) return [];
+  onStage(`Reading ${ids.length} messages…`);
   const meta = await fetchMeta(token, ids);
+  onStage("Asking Claude to sort…");
   const emails = meta.map((m) => ({
     id: m.threadId,
     from: m.from,
@@ -362,14 +365,17 @@ async function loadImportantData(token) {
   return summarize("important", { emails });
 }
 
-async function loadDigestData(token) {
+async function loadDigestData(token, onStage) {
+  onStage("Fetching newsletters…");
   const ids = await listMessageIds(
     token,
     "in:inbox (category:updates OR category:promotions OR unsubscribe)",
     40
   );
   if (!ids.length) return { h24: [], week: [], older: [] };
+  onStage(`Reading ${ids.length} messages…`);
   const meta = await fetchMeta(token, ids);
+  onStage("Asking Claude to summarize…");
   const emails = meta.map((m) => ({
     id: m.threadId,
     from: m.from,
@@ -380,9 +386,11 @@ async function loadDigestData(token) {
   return summarize("digest", { emails });
 }
 
-async function loadSubsData(token) {
+async function loadSubsData(token, onStage) {
+  onStage("Fetching promotions…");
   const ids = await listMessageIds(token, "in:inbox category:promotions", 60);
   if (!ids.length) return [];
+  onStage(`Reading ${ids.length} senders…`);
   const meta = await fetchMeta(token, ids);
   // Group by sender client-side (deterministic), AI only writes the blurbs.
   const groups = {};
@@ -481,13 +489,15 @@ export default function App() {
         return { ...prev, [key]: { loading: true, data: null, error: null } };
       });
       if (!proceed) return;
+      const onStage = (label) =>
+        setSection(key, { loading: true, label, data: null, error: null });
       try {
         const data =
           key === "important"
-            ? await loadImportantData(token)
+            ? await loadImportantData(token, onStage)
             : key === "digest"
-            ? await loadDigestData(token)
-            : await loadSubsData(token);
+            ? await loadDigestData(token, onStage)
+            : await loadSubsData(token, onStage);
         setSection(key, { loading: false, data, error: null });
       } catch (e) {
         if (e.message === "AUTH_EXPIRED") {
