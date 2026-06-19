@@ -13,21 +13,28 @@ const gmailLink = (threadId) => `https://mail.google.com/mail/u/0/#all/${threadI
 // Gmail REST helpers
 // ------------------------------------------------------------------
 async function gfetch(token, path, opts = {}) {
-  const res = await fetch(`${GMAIL}${path}`, {
-    ...opts,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
-  });
-  if (res.status === 401) throw new Error("AUTH_EXPIRED");
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Gmail ${res.status}: ${body.slice(0, 140)}`);
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${GMAIL}${path}`, {
+      ...opts,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+    });
+    if (res.status === 401) throw new Error("AUTH_EXPIRED");
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Gmail ${res.status}: ${body.slice(0, 140)}`);
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  } finally {
+    clearTimeout(tid);
   }
-  if (res.status === 204) return null;
-  return res.json();
 }
 
 async function listMessageIds(token, q, max = 40) {
@@ -92,14 +99,21 @@ async function batchArchive(token, messageIds) {
 // AI summarize via our serverless function
 // ------------------------------------------------------------------
 async function summarize(mode, payload) {
-  const res = await fetch("/api/summarize", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode, payload }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `Summarize failed (${res.status})`);
-  return data;
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch("/api/summarize", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, payload }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Summarize failed (${res.status})`);
+    return data;
+  } finally {
+    clearTimeout(tid);
+  }
 }
 
 // ------------------------------------------------------------------
