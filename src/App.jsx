@@ -441,6 +441,8 @@ export default function App() {
     digest: { loading: false, data: null, error: null },
     subs: { loading: false, data: null, error: null },
   });
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
 
   // Load Google Identity Services
   useEffect(() => {
@@ -482,15 +484,14 @@ export default function App() {
   const load = useCallback(
     async (key, force = false) => {
       if (!token) return;
-      let proceed = false;
-      setSections((prev) => {
-        if (!force && (prev[key].loading || prev[key].data)) return prev;
-        proceed = true;
-        return { ...prev, [key]: { loading: true, data: null, error: null } };
-      });
-      if (!proceed) return;
+      const curr = sectionsRef.current[key];
+      if (!force && (curr.loading || curr.data !== null)) return;
+      setSections((prev) => ({
+        ...prev,
+        [key]: { loading: true, label: null, data: null, error: null },
+      }));
       const onStage = (label) =>
-        setSection(key, { loading: true, label, data: null, error: null });
+        setSections((prev) => ({ ...prev, [key]: { ...prev[key], label } }));
       try {
         const data =
           key === "important"
