@@ -1,4 +1,4 @@
-# Mailroom
+# mailroom
 
 Your Gmail inbox, sorted: what matters, what's news, and what can go.
 
